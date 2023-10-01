@@ -13,18 +13,41 @@
 import json
 import os
 
+def push_impl(op, code, stack, pc):
+    # print("OP: ", op)
+    # print("CODE: ", code)
+    push1 = 60
+    size = (int(op) - push1) + 1
+    # print("SIZE: ", size)
+    pc += size
+    result_str = ""
+    i = 0
+    while i < size * 2:
+        result_str += code[i] + code[i + 1]
+        i += 2
+    stack.append(int(result_str, 16))
+    return (stack, pc)
+
 def evm(code):
     pc = 0
     success = True
     stack = []
 
     while pc < len(code):
-        op = code[pc]
-        pc += 1
-
-        # TODO: implement the EVM here!
-        
-
+        op = code[pc] + code[pc + 1]
+        pc += 2
+        if op == "00":
+            return (True, stack)
+        elif op == "5f":
+            stack.append(0)
+        elif op == "60":
+            op = code[pc] + code[pc + 1]
+            pc += 2
+            stack.append(int(op, 16))
+        elif op.startswith("6"):
+            (stack, pc) = push_impl(op, code[pc:], stack, pc)
+            print(pc)
+            print(len(code))
     return (success, stack)
 
 def test():
@@ -37,7 +60,8 @@ def test():
         for i, test in enumerate(data):
             # Note: as the test cases get more complex, you'll need to modify this
             # to pass down more arguments to the evm function
-            code = bytes.fromhex(test['code']['bin'])
+            # code = bytes.fromhex(test['code']['bin'])
+            code = test['code']['bin']
             (success, stack) = evm(code)
 
             expected_stack = [int(x, 16) for x in test['expect']['stack']]
