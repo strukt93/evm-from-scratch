@@ -13,6 +13,8 @@
 import json
 import os
 
+MAX_UINT256 = 2**256
+
 def push_impl(op, code, stack, pc):
     push1 = "60"
     size = (int(op, 16) - int(push1, 16)) + 1
@@ -25,6 +27,25 @@ def push_impl(op, code, stack, pc):
     stack.append(int(result_str, 16))
     return (stack, pc)
 
+def add_impl(a, b):
+    return (a + b) % MAX_UINT256
+
+def mul_impl(a, b, mod):
+    return (a * b) % mod
+
+def sub_impl(a, b):
+    result = a - b
+    return result if result >= 0 else (MAX_UINT256 + result)
+
+def div_impl(a, b):
+    return 0 if b == 0 else int(a / b)
+
+def mod_impl(a, b):
+    return 0 if b == 0 else int(a % b)
+
+def exp_impl(a, b):
+    return (a ** b) % MAX_UINT256
+
 def evm(code):
     pc = 0
     success = True
@@ -33,15 +54,71 @@ def evm(code):
     while pc < len(code):
         op = code[pc] + code[pc + 1]
         pc += 2
-        if op == "00":
+        if op == "00": #STOP
             return (True, stack)
-        elif op == "5f":
+        elif op == "01": #ADD
+            a = stack.pop()
+            b = stack.pop()
+            result = add_impl(a, b)
+            stack.append(result)
+        elif op == "02": #MUL
+            a = stack.pop()
+            b = stack.pop()
+            result = mul_impl(a, b, MAX_UINT256)
+            stack.append(result)
+        elif op == "03": #SUB
+            a = stack.pop()
+            b = stack.pop()
+            result = sub_impl(a, b)
+            stack.append(result)
+        elif op == "04": #DIV
+            a = stack.pop()
+            b = stack.pop()
+            result = div_impl(a, b)
+            stack.append(result)
+        elif op == "06": #MOD
+            a = stack.pop()
+            b = stack.pop()
+            result = mod_impl(a, b)
+            stack.append(result)
+        elif op == "08": #ADDMOD
+            a = stack.pop()
+            b = stack.pop()
+            mod = stack.pop()
+            result = add_impl(a, b)
+            result = mod_impl(result, mod)
+            stack.append(result)
+        elif op == "09": #MULMOD
+            a = stack.pop()
+            b = stack.pop()
+            mod = stack.pop()
+            result = mul_impl(a, b, mod)
+            result = mod_impl(result, MAX_UINT256)
+            stack.append(result)
+        elif op == "0a": #EXP
+            a = stack.pop()
+            b = stack.pop()
+            result = exp_impl(a, b)
+            stack.append(result)
+        elif op == "0b": #SIGNEXTEND
+            stack.pop() #Get rid of "b"
+            x = stack.pop()
+            bin_x = bin(x)[2:]
+            bin_x = bin_x if len(bin_x) == 8 else ("0" * (8 - len(bin_x))) + bin_x # Fill with zeros if not 8 bits
+            if bin_x[0] == "0":
+                stack.append(x) #Push the operand if positive
+            else:
+                result = ("ff" * 31) + hex(x)[2:] #Else, append with "FF"s (to signal it is a negative number)
+                stack.append(int(result, 16)) #Then push the int version to the stack
+        elif op == "50": #POP
+            stack.pop()
+        elif op == "5f": #PUSH0
             stack.append(0)
-        elif op == "60":
+        elif op == "60": #PUSH1
             op = code[pc] + code[pc + 1]
             pc += 2
             stack.append(int(op, 16))
-        elif op.startswith("6") or op.startswith("7"):
+        elif op.startswith("6") or op.startswith("7"): #PUSH2 - PUSH32
             (stack, pc) = push_impl(op, code[pc:], stack, pc)
     return (success, stack)
 
