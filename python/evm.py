@@ -14,12 +14,9 @@ import json
 import os
 
 def push_impl(op, code, stack, pc):
-    # print("OP: ", op)
-    # print("CODE: ", code)
-    push1 = 60
-    size = (int(op) - push1) + 1
-    # print("SIZE: ", size)
-    pc += size
+    push1 = "60"
+    size = (int(op, 16) - int(push1, 16)) + 1
+    pc += (size * 2)
     result_str = ""
     i = 0
     while i < size * 2:
@@ -44,10 +41,8 @@ def evm(code):
             op = code[pc] + code[pc + 1]
             pc += 2
             stack.append(int(op, 16))
-        elif op.startswith("6"):
+        elif op.startswith("6") or op.startswith("7"):
             (stack, pc) = push_impl(op, code[pc:], stack, pc)
-            print(pc)
-            print(len(code))
     return (success, stack)
 
 def test():
