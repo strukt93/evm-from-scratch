@@ -46,6 +46,24 @@ def mod_impl(a, b):
 def exp_impl(a, b):
     return (a ** b) % MAX_UINT256
 
+def sigextend_impl(x):
+    bin_x = bin(x)[2:]
+    bin_x = bin_x if len(bin_x) == 8 else ("0" * (8 - len(bin_x))) + bin_x
+    if bin_x[0] == "0":
+        return x, False
+    else:
+        result = ("ff" * 31) + hex(x)[2:]
+        return int(result, 16), True
+
+def to_signed(x):
+    result = -(x & 0x80000000) | (x & 0x7fffffff)
+    return result
+
+def is_negative(x):
+    hex_x = hex(x)[64:]
+    # int_x = int("0x"+hex_x, 16)
+    # return int_x if int_x < 128 else int_x - 256
+    
 def evm(code):
     pc = 0
     success = True
@@ -57,59 +75,115 @@ def evm(code):
         if op == "00": #STOP
             return (True, stack)
         elif op == "01": #ADD
-            a = stack.pop()
-            b = stack.pop()
+            a, b = stack.pop(), stack.pop()
             result = add_impl(a, b)
             stack.append(result)
         elif op == "02": #MUL
-            a = stack.pop()
-            b = stack.pop()
+            a, b = stack.pop(), stack.pop()
             result = mul_impl(a, b, MAX_UINT256)
             stack.append(result)
         elif op == "03": #SUB
-            a = stack.pop()
-            b = stack.pop()
+            a, b = stack.pop(), stack.pop()
             result = sub_impl(a, b)
             stack.append(result)
         elif op == "04": #DIV
-            a = stack.pop()
-            b = stack.pop()
+            a, b = stack.pop(), stack.pop()
             result = div_impl(a, b)
             stack.append(result)
+        elif op == "05": #SDIV
+            a, b = stack.pop(), stack.pop()
+            sig_a, sig_b = to_signed(a), to_signed(b)
+            result = div_impl(sig_a, sig_b)
+            if result < 0:
+                result = MAX_UINT256 + result
+            stack.append(result)
         elif op == "06": #MOD
-            a = stack.pop()
-            b = stack.pop()
+            a, b = stack.pop(), stack.pop()
             result = mod_impl(a, b)
             stack.append(result)
+        elif op == "07": #SMOD
+            a, b = stack.pop(), stack.pop()
+            sig_a, sig_b = to_signed(a), to_signed(b)
+            result = mod_impl(sig_a, sig_b)
+            if result < 0:
+                result = MAX_UINT256 + result
+            stack.append(result)
         elif op == "08": #ADDMOD
-            a = stack.pop()
-            b = stack.pop()
+            a, b = stack.pop(), stack.pop()
             mod = stack.pop()
             result = add_impl(a, b)
             result = mod_impl(result, mod)
             stack.append(result)
         elif op == "09": #MULMOD
-            a = stack.pop()
-            b = stack.pop()
+            a, b = stack.pop(), stack.pop()
             mod = stack.pop()
             result = mul_impl(a, b, mod)
             result = mod_impl(result, MAX_UINT256)
             stack.append(result)
         elif op == "0a": #EXP
-            a = stack.pop()
-            b = stack.pop()
+            a, b = stack.pop(), stack.pop()
             result = exp_impl(a, b)
             stack.append(result)
         elif op == "0b": #SIGNEXTEND
             stack.pop() #Get rid of "b"
             x = stack.pop()
-            bin_x = bin(x)[2:]
-            bin_x = bin_x if len(bin_x) == 8 else ("0" * (8 - len(bin_x))) + bin_x # Fill with zeros if not 8 bits
-            if bin_x[0] == "0":
-                stack.append(x) #Push the operand if positive
-            else:
-                result = ("ff" * 31) + hex(x)[2:] #Else, append with "FF"s (to signal it is a negative number)
-                stack.append(int(result, 16)) #Then push the int version to the stack
+            (result, _) = sigextend_impl(x)
+            stack.append(result)
+        elif op == "10": #LT
+            a, b = stack.pop(), stack.pop()
+            result = 1 if a < b else 0
+            stack.append(result)
+        elif op == "11": #GT
+            a, b = stack.pop(), stack.pop()
+            result = 1 if a > b else 0
+            stack.append(result)
+        elif op == "12": #SLT
+            a, b = stack.pop(), stack.pop()
+            sig_a, sig_b = to_signed(a), to_signed(b)
+            result = 1 if sig_a < sig_b else 0
+            stack.append(result)
+        elif op == "13": #SGT
+            a, b = stack.pop(), stack.pop()
+            sig_a, sig_b = to_signed(a), to_signed(b)
+            result = 1 if sig_a > sig_b else 0
+            stack.append(result)
+        elif op == "14": #EQ
+            a, b = stack.pop(), stack.pop()
+            result = 1 if a == b else 0
+            stack.append(result)
+        elif op == "15": #ISZERO
+            a = stack.pop()
+            result = 1 if a == 0 else 0
+            stack.append(result)
+        elif op == "16": #AND
+            a, b = stack.pop(), stack.pop()
+            stack.append(a & b)
+        elif op == "17": #OR
+            a, b = stack.pop(), stack.pop()
+            stack.append(a | b)
+        elif op == "18": #XOR
+            a, b = stack.pop(), stack.pop()
+            stack.append(a ^ b)
+        elif op == "19": #NOT
+            a = stack.pop()
+            stack.append(MAX_UINT256 + ~a)
+        elif op == "1b": #SHL
+            a, b = stack.pop(), stack.pop()
+            result = hex(b << a)[2:]
+            if len(result) > 64:
+                result = result[-64:]
+            stack.append(int(result, 16))
+        elif op == "1c": #SHR
+            a, b = stack.pop(), stack.pop()
+            result = b >> a
+            stack.append(result)
+        elif op == "1d": #SAR
+            a, b = stack.pop(), stack.pop()
+            b_sig = to_signed(b)
+            result = b_sig >> a
+            if result < 0:
+                result = MAX_UINT256 + result
+            stack.append(result)
         elif op == "50": #POP
             stack.pop()
         elif op == "5f": #PUSH0
