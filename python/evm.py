@@ -14,6 +14,7 @@ import json
 import os
 
 MAX_UINT256 = 2**256
+BITS_IN_32 = 256
 
 def push_impl(op, code, stack, pc):
     push1 = "60"
@@ -25,6 +26,37 @@ def push_impl(op, code, stack, pc):
         result_str += code[i] + code[i + 1]
         i += 2
     stack.append(int(result_str, 16))
+    return (stack, pc)
+
+def dup_impl(op, stack, pc):
+    dup1 = "80"
+    size = (int(op, 16) - int(dup1, 16)) + 1
+    pc += (size * 2) - 2
+    old_vals = []
+    i = 0
+    while i < size:
+        old_vals.append(stack.pop())
+        i += 1
+    a = old_vals[-1]
+    stack.append(a)
+    for x in old_vals:
+        stack.append(x)
+    return (stack, pc)
+
+def swap_impl(op, stack, pc):
+    swap = "90"
+    size = (int(op, 16) - int(swap, 16)) + 1
+    pc += (size * 2) - 2
+    old_vals = []
+    i = 0
+    a = stack.pop()
+    while i < size - 1:
+        old_vals.append(stack.pop())
+        i += 1
+    old_vals.reverse()
+    stack.append(a)
+    for x in old_vals:
+        stack.append(x)
     return (stack, pc)
 
 def add_impl(a, b):
@@ -59,10 +91,11 @@ def to_signed(x):
     result = -(x & 0x80000000) | (x & 0x7fffffff)
     return result
 
-def is_negative(x):
-    hex_x = hex(x)[64:]
-    # int_x = int("0x"+hex_x, 16)
-    # return int_x if int_x < 128 else int_x - 256
+def to_32b_hex(x):
+    hex_x = hex(x)[2:]
+    if len(hex_x) < 64:
+        hex_x = "0" * (64 - len(hex_x)) + hex_x
+    return hex_x
     
 def evm(code):
     pc = 0
@@ -167,6 +200,14 @@ def evm(code):
         elif op == "19": #NOT
             a = stack.pop()
             stack.append(MAX_UINT256 + ~a)
+        elif op == "1a": #BYTE
+            a, b = stack.pop(), stack.pop()
+            if a > 31:
+                stack.append(0)
+            else:
+                b_32 = to_32b_hex(b)
+                offset = a * 2
+                stack.append(int(b_32[offset] + b_32[offset + 1], 16))
         elif op == "1b": #SHL
             a, b = stack.pop(), stack.pop()
             result = hex(b << a)[2:]
@@ -179,11 +220,14 @@ def evm(code):
             stack.append(result)
         elif op == "1d": #SAR
             a, b = stack.pop(), stack.pop()
-            b_sig = to_signed(b)
-            result = b_sig >> a
-            if result < 0:
-                result = MAX_UINT256 + result
-            stack.append(result)
+            if a >= BITS_IN_32 and to_32b_hex(b)[0] == "0":
+                stack.append(0)
+            else:
+                b_sig = to_signed(b)
+                result = b_sig >> a
+                if result < 0:
+                    result = MAX_UINT256 + result
+                stack.append(result)
         elif op == "50": #POP
             stack.pop()
         elif op == "5f": #PUSH0
@@ -194,6 +238,10 @@ def evm(code):
             stack.append(int(op, 16))
         elif op.startswith("6") or op.startswith("7"): #PUSH2 - PUSH32
             (stack, pc) = push_impl(op, code[pc:], stack, pc)
+        elif op.startswith("8"): #DUP1 - DUP16
+            (stack, pc) = dup_impl(op, stack, pc)
+        elif op.startswith("9"): #DUP1 - DUP16
+            (stack, pc) = swap_impl(op, stack, pc)
     return (success, stack)
 
 def test():
