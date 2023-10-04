@@ -53,10 +53,11 @@ def swap_impl(op, stack, pc):
     while i < size - 1:
         old_vals.append(stack.pop())
         i += 1
-    old_vals.reverse()
-    stack.append(a)
+    b = stack.pop()
+    stack.append(b)
     for x in old_vals:
         stack.append(x)
+    stack.append(a)
     return (stack, pc)
 
 def add_impl(a, b):
@@ -230,18 +231,18 @@ def evm(code):
                 stack.append(result)
         elif op == "50": #POP
             stack.pop()
+        elif op == "58": #PC
+            stack.append(pc)
         elif op == "5f": #PUSH0
             stack.append(0)
-        elif op == "60": #PUSH1
-            op = code[pc] + code[pc + 1]
-            pc += 2
-            stack.append(int(op, 16))
-        elif op.startswith("6") or op.startswith("7"): #PUSH2 - PUSH32
+        elif op.startswith("6") or op.startswith("7"): #PUSH1 - PUSH32
             (stack, pc) = push_impl(op, code[pc:], stack, pc)
         elif op.startswith("8"): #DUP1 - DUP16
             (stack, pc) = dup_impl(op, stack, pc)
-        elif op.startswith("9"): #DUP1 - DUP16
+        elif op.startswith("9"): #SWAP - SWAP16
             (stack, pc) = swap_impl(op, stack, pc)
+        elif op == "fe": #INVALID
+            return (False, stack)
     return (success, stack)
 
 def test():
