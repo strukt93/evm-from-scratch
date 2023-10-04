@@ -232,9 +232,11 @@ def evm(code):
         elif op == "50": #POP
             stack.pop()
         elif op == "58": #PC
-            stack.append(pc)
+            stack.append((pc - 2) / 2)
         elif op == "5f": #PUSH0
             stack.append(0)
+        elif op == "5a": #GAS
+            stack.append(MAX_UINT256 - 1)
         elif op.startswith("6") or op.startswith("7"): #PUSH1 - PUSH32
             (stack, pc) = push_impl(op, code[pc:], stack, pc)
         elif op.startswith("8"): #DUP1 - DUP16
